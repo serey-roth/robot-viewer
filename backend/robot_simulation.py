@@ -252,6 +252,7 @@ class RobotSimulation:
             next_t = max(next_t, now)
 
     def _load_scene(self):
+        sapien.physx.set_scene_config(gravity=np.array([0, 0, 0], dtype=np.float32))
         self._physx_system = sapien.physx.PhysxCpuSystem()
         self._scene = sapien.Scene([self._physx_system])
         self._scene.set_timestep(self._timestep)
@@ -273,7 +274,7 @@ class RobotSimulation:
         self._joints = {j.name: j for j in self._robot.get_active_joints()}
         self._joint_index = {j.name: i for i, j in enumerate(self._robot.get_active_joints())}
         for j in self._joints.values():
-            j.set_drive_properties(stiffness=10, damping=5)
+            j.set_drive_properties(stiffness=1000, damping=50)
 
         self._state = RobotState(model_name)
         

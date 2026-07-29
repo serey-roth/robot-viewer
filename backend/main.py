@@ -68,13 +68,17 @@ async def robot_session(websocket: WebSocket) -> None:
     async def receive_commands() -> None:
         while True:
             data = await websocket.receive_json()
+            
             action = data.pop("action", None)
             if action is None:
                 continue
             
             try:
+                print(f"[dispatch] {action} {data}")
                 await asyncio.to_thread(controller.dispatch, action, **data)
+                print(f"[dispatch] {action} done")
             except Exception as e:
+                print(f"[dispatch] {action} failed: {e!r}")
                 await websocket.send_text(json.dumps({"error": str(e)}))
                 
     try:

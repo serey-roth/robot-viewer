@@ -126,6 +126,8 @@ function useRobot() {
 export default function App() {
   const { joints, status, dispatchAction } = useRobot()
 
+  const isRobotEnabled = status === "connected"
+
   return (
     <div className="w-screen h-screen flex flex-col bg-white">
       <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
@@ -135,31 +137,77 @@ export default function App() {
           <span className="text-xs text-gray-400 capitalize">{status}</span>
         </div>
       </header>
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         <div className="flex-1">
           <RobotViewer joints={joints} />
         </div>
         <aside className="w-64 shrink-0 border-l border-gray-100 flex flex-col overflow-y-auto">
-          <div className="p-4 space-y-5">
-            <div className="space-y-2">
+          <div className="p-4 flex flex-col gap-2">
+            <div className="flex flex-col gap-2">
               <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Hands</p>
               <div className="flex gap-2 items-center">
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_left_hand")}>Open L</button>
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_right_hand")}>Open R</button>
-                </div>
-                <div className="flex gap-2">
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_left_hand")}>Close L</button>
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_right_hand")}>Close R</button>
-                </div>
-                <div className="flex gap-2">
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_both_hands")}>Open Both</button>
-                </div> 
-                <div className="flex gap-2">
-                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_both_hands")}>Close Both</button>
-                </div>
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("open_left_hand")}>Open L</button>
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("open_right_hand")}>Open R</button>
+              </div>
+              <div className="flex gap-2">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("close_left_hand")}>Close L</button>
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("close_right_hand")}>Close R</button>
+              </div>
+              <div className="flex gap-2">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("open_both_hands")}>Open Both</button>
+              </div> 
+              <div className="flex gap-2">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("close_both_hands")}>Close Both</button>
               </div>
             </div>
+
+            <div className="bg-gray-50 w-full h-0.5 space-y-1"/>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Arms</p>
+              <div className="flex gap-2 items-center">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("move_arm", { side: "left" })}>Move L</button>
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("move_arm", { side: "right" })}>Move R</button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 w-full h-0.5 space-y-1"/>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Torso</p>
+              <div className="flex gap-2 items-center">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("move_torso")}>Move</button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 w-full h-0.5 space-y-1"/>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Head</p>
+              <div className="flex gap-2 items-center">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("move_head")}>Move</button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 w-full h-0.5 space-y-1"/>
+
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Chassis</p>
+              <div className="flex gap-2 items-center">
+                <button disabled={!isRobotEnabled} className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800 disabled:opacity-50" onClick={() => dispatchAction("move_chassis")}>Move Wheels</button>
+              </div>
+            </div>
+          </div>
         </aside>
+
+        {status === "connecting" && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3 px-8 py-6 bg-white rounded-2xl shadow-lg">
+              <div className="w-7 h-7 rounded-full border-2 border-gray-200 border-t-gray-700 animate-spin" />
+              <span className="text-sm text-gray-500 tracking-tight">Setting up robot…</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
