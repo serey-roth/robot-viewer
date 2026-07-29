@@ -14,6 +14,8 @@ from dexcomm.codecs import (
     DictDataCodec, BMSStateCodec, EStopStateCodec, BasicDataCodec,
 )
 
+from motion_planner import MotionPlanner, build_planners
+
 COMPONENT_JOINTS: dict[str, list[str]] = {
     "left_arm":        [f"L_arm_j{i}" for i in range(1, 8)],
     "right_arm":       [f"R_arm_j{i}" for i in range(1, 8)],
@@ -203,13 +205,13 @@ class RobotSimulation:
         self._topic_prefix = f"{model_name}/"
         self._config = config
         self._lock = threading.Lock()
-        self._joint_target_pos: dict[str, float] = {}
         self._stop = threading.Event()
         self._ready = threading.Event()
         self._timestep = 1/240.0
 
         self._load_scene()
         self._load_robot(model_name)
+        self._planners: dict[str, MotionPlanner] = build_planners(COMPONENT_JOINTS, self._timestep)
         self._setup_comms()
 
         self._heartbeat_thread = threading.Thread(
@@ -326,19 +328,19 @@ class RobotSimulation:
         self._register_services()
 
     def _make_cmd_handler(self, comp: str):
-        joint_names = COMPONENT_JOINTS[comp]
         def on_cmd(cmd: dict):
             pos = cmd.get("pos", [])
             with self._lock:
-                for name, val in zip(joint_names, pos):
-                    self._joint_target_pos[name] = float(val)
+                self._planners[comp].set_target(pos)
         return on_cmd
 
     def _apply_joint_targets(self):
         with self._lock:
-            for name, target in self._joint_target_pos.items():
-                if name in self._joints:
-                    self._joints[name].set_drive_target(target)
+            for comp, planner in self._planners.items():
+                next_pos = planner.step()
+                for name, pos in zip(COMPONENT_JOINTS[comp], next_pos):
+                    if name in self._joints:
+                        self._joints[name].set_drive_target(pos)
 
     def _update_component(
         self,
@@ -346,9 +348,9 @@ class RobotSimulation:
         joint_names: list[str],
         qpos: np.ndarray,
         qvel: np.ndarray,
-        targets: dict[str, float],
         ts: int,
     ) -> None:
+        planner_pos = self._planners[comp]._inp.current_position
         n = len(joint_names)
         pos_arr = np.zeros(n, dtype=np.float32)
         vel_arr = np.zeros(n, dtype=np.float32)
@@ -356,11 +358,11 @@ class RobotSimulation:
             idx = self._joint_index.get(name)
             if idx is not None and idx < len(qpos):
                 val = float(qpos[idx])
-                pos_arr[i] = val if not math.isnan(val) else targets.get(name, 0.0)
+                pos_arr[i] = val if not math.isnan(val) else planner_pos[i]
                 v = float(qvel[idx]) if idx < len(qvel) else 0.0
                 vel_arr[i] = 0.0 if math.isnan(v) else v
             else:
-                pos_arr[i] = targets.get(name, 0.0)
+                pos_arr[i] = planner_pos[i]
         self._state.update_component(comp, pos_arr, vel_arr, np.zeros(n, dtype=np.float32), np.zeros(n, dtype=np.float32), ts)
 
     def _publish_component(self, comp: str) -> None:
@@ -400,11 +402,9 @@ class RobotSimulation:
         ts = time.time_ns()
         qpos = self._robot.get_qpos()
         qvel = self._robot.get_qvel()
-        with self._lock:
-            targets = dict(self._joint_target_pos)
 
         for comp, joint_names in COMPONENT_JOINTS.items():
-            self._update_component(comp, joint_names, qpos, qvel, targets, ts)
+            self._update_component(comp, joint_names, qpos, qvel, ts)
             self._publish_component(comp)
 
         self._publish_battery()
