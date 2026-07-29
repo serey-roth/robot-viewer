@@ -1,137 +1,166 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import * as THREE from "three"
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js"
+import URDFLoader from "urdf-loader"
 
-type RobotConnectivity = "online" | "offline"
-type RobotActivity = "idle" | "moving" | "picking" | "placing"
+type JointState = { pos: number; vel: number }
+type RobotData = Record<string, JointState>
 
-type Robot = {
-  id: string
-  name: string
-  battery_percentage: number
-  alerts: string[]
-  activity: RobotActivity
-  connectivity: RobotConnectivity
-}
-
-type WsStatus = "connecting" | "connected" | "disconnected"
-
-function batteryColor(pct: number) {
-  if (pct < 20) return "bg-red-500"
-  if (pct < 40) return "bg-yellow-400"
-  return "bg-green-500"
-}
-
-function RobotCardSkeleton() {
-  return (
-    <div className="flex flex-col gap-3 p-4 rounded-lg bg-gray-50 border border-gray-200 shadow-sm animate-pulse">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-gray-200" />
-          <div className="h-4 w-24 rounded bg-gray-200" />
-        </div>
-        <div className="h-3 w-12 rounded bg-gray-200" />
-      </div>
-      <div className="flex flex-col gap-2">
-        <div className="h-3 w-32 rounded bg-gray-200" />
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-1.5 rounded-full bg-gray-200" />
-          <div className="h-3 w-8 rounded bg-gray-200" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function RobotCard({ robot }: { robot: Robot }) {
-  return (
-    <div className="flex flex-col gap-3 p-4 rounded-lg bg-gray-50 border border-gray-200 shadow-sm">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <span className={`w-4 h-4 border-2 border-gray-200 rounded-full ${robot.connectivity === "online" ? "bg-green-500" : "bg-red-500"}`} />
-          <span className="text-base font-semibold text-gray-900">{robot.name}</span>
-        </div>
-        <span className="text-xs text-gray-400">{robot.connectivity}</span>
-      </div>
-      <div className="flex flex-col gap-2 text-sm">
-        <p>
-          <span className="text-gray-500">{robot.activity === "idle" ? "No activity" : "Activity"}</span>
-          {robot.activity !== "idle" && (
-            <>
-              <span className="mx-1.5 text-gray-300">·</span>
-              <span className="text-gray-800">{robot.activity}</span>
-            </>
-          )}
-        </p>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-1.5 bg-gray-200 rounded-full">
-            <div
-              className={`h-1.5 rounded-full ${batteryColor(robot.battery_percentage)}`}
-              style={{ width: `${robot.battery_percentage}%` }}
-            />
-          </div>
-          <span className="text-xs text-gray-500 w-8 text-right">
-            {robot.battery_percentage.toFixed(0)}%
-          </span>
-        </div>
-        {robot.alerts.length > 0 && (
-          <div className="flex flex-wrap gap-1 pt-1">
-            {robot.alerts.map((alert) => (
-              <span key={alert} className="text-xs px-2 py-px rounded-full bg-red-100 text-red-600">
-                {alert.replace("_", " ")}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function useTelemetry() {
-  const [robots, setRobots] = useState<Robot[]>([])
-  const [wsStatus, setWsStatus] = useState<WsStatus>("connecting")
+function RobotViewer({ joints }: { joints: Record<string, number> }) {
+  const mountRef = useRef<HTMLDivElement>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const robotRef = useRef<any>(null)
 
   useEffect(() => {
-    const websocket = new WebSocket("ws://localhost:8000/ws/robots_telemetry")
+    const el = mountRef.current!
+    const w = el.clientWidth
+    const h = el.clientHeight
 
-    websocket.addEventListener("open", () => setWsStatus("connected"))
-    websocket.addEventListener("message", (e) => setRobots(JSON.parse(e.data)))
-    websocket.addEventListener("close", () => setWsStatus("disconnected"))
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(w, h)
+    renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.shadowMap.enabled = true
+    el.appendChild(renderer.domElement)
 
-    return () => websocket.close()
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0xf8f9fa)
+
+    const camera = new THREE.PerspectiveCamera(45, w / h, 0.01, 100)
+    camera.position.set(2, 1.5, 2)
+
+    const controls = new OrbitControls(camera, renderer.domElement)
+    controls.target.set(0, 0.8, 0)
+    controls.update()
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6))
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8)
+    dirLight.position.set(2, 4, 2)
+    scene.add(dirLight)
+
+    const grid = new THREE.GridHelper(4, 20, 0xdddddd, 0xeeeeee)
+    scene.add(grid)
+
+    const manager = new THREE.LoadingManager()
+    const gltfLoader = new GLTFLoader(manager)
+
+    const loader = new URDFLoader(manager)
+    loader.loadMeshCb = (path, _manager, _material, done) => {
+      gltfLoader.load(
+        path,
+        (gltf) => done(gltf.scene),
+        undefined,
+        (err) => { console.error("mesh load error", path, err); done(new THREE.Object3D(), err as Error) },
+      )
+    }
+    loader.load("/robots/humanoid/vega_1/vega_1_f5d6.urdf", (robot) => {
+      robot.rotation.x = -Math.PI / 2
+      scene.add(robot)
+      robotRef.current = robot
+    })
+
+    let animId: number
+    const animate = () => {
+      animId = requestAnimationFrame(animate)
+      controls.update()
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    const onResize = () => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    }
+    window.addEventListener("resize", onResize)
+
+    return () => {
+      cancelAnimationFrame(animId)
+      window.removeEventListener("resize", onResize)
+      renderer.dispose()
+      el.removeChild(renderer.domElement)
+    }
   }, [])
 
-  return { robots, wsStatus }
+  useEffect(() => {
+    const robot = robotRef.current
+    if (!robot) return
+    for (const [name, angle] of Object.entries(joints)) {
+      robot.setJointValue(name, angle)
+    }
+  }, [joints])
+
+  return <div ref={mountRef} className="w-full h-full" />
 }
 
-const SKELETON_COUNT = 5
+function useRobot() {
+  const [joints, setJoints] = useState<Record<string, number>>({})
+  const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">("connecting")
+  const wsRef = useRef<WebSocket | null>(null)
 
-function App() {
-  const { robots, wsStatus } = useTelemetry()
-  const isLoading = robots.length === 0
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:8000/ws/robot")
+    ws.addEventListener("open", () => setStatus("connected"))
+    ws.addEventListener("close", () => setStatus("disconnected"))
+    ws.addEventListener("message", (e) => {
+      const data: RobotData = JSON.parse(e.data)
+      const next: Record<string, number> = {}
+      for (const [k, v] of Object.entries(data)) {
+        next[k] = v.pos
+      }
+      setJoints(next)
+    })
+    wsRef.current = ws
+    return () => ws.close()
+  }, [])
+
+  function dispatchAction(action: string, payload?: Record<string, unknown>) {
+    wsRef.current?.send(JSON.stringify({ action, ...payload }))
+  }
+
+  return { joints, status, dispatchAction }
+}
+
+export default function App() {
+  const { joints, status, dispatchAction } = useRobot()
 
   return (
-    <div className="w-screen min-h-screen p-8">
-      <div className="block mx-auto sm:max-w-3xl space-y-4">
-
-        {wsStatus === "disconnected" && (
-          <div className="text-sm text-center text-red-500 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
-            Connection lost — attempting to reconnect…
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          {isLoading
-            ? Array.from({ length: SKELETON_COUNT }).map((_, i) => (
-                <RobotCardSkeleton key={i} />
-              ))
-            : robots.map((robot) => (
-                <RobotCard key={robot.id} robot={robot} />
-              ))}
+    <div className="w-screen h-screen flex flex-col bg-white">
+      <header className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+        <h1 className="text-sm font-semibold text-gray-900 tracking-tight">Dexmate Robot Control</h1>
+        <div className="flex items-center gap-1.5">
+          <span className={`w-2 h-2 rounded-full ${status === "connected" ? "bg-green-400" : "bg-gray-300"}`} />
+          <span className="text-xs text-gray-400 capitalize">{status}</span>
         </div>
-
+      </header>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1">
+          <RobotViewer joints={joints} />
+        </div>
+        <aside className="w-64 shrink-0 border-l border-gray-100 flex flex-col overflow-y-auto">
+          <div className="p-4 space-y-5">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Hands</p>
+              <div className="flex gap-2 items-center">
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_left_hand")}>Open L</button>
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_right_hand")}>Open R</button>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_left_hand")}>Close L</button>
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_right_hand")}>Close R</button>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("open_both_hands")}>Open Both</button>
+                </div> 
+                <div className="flex gap-2">
+                  <button className="flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors cursor-pointer select-none bg-gray-100 hover:bg-gray-200 text-gray-800" onClick={() => dispatchAction("close_both_hands")}>Close Both</button>
+                </div>
+              </div>
+            </div>
+        </aside>
       </div>
     </div>
   )
 }
-
-export default App
